@@ -91,8 +91,8 @@ try:
 	os.makedirs(WORK_DIR)
 
 	print("[I] Expanding APK...")
-	apk_dump = subprocess.check_output(["aapt", "dump", "badging", apk_path])
-	apk_permissions = subprocess.check_output(["aapt", "dump", "permissions", apk_path])
+	apk_dump = subprocess.check_output(["aapt", "dump", "badging", apk_path]).decode()
+	apk_permissions = subprocess.check_output(["aapt", "dump", "permissions", apk_path]).decode()
 	package_name = apk_dump.split("package: name=")[1].split(" ")[0].strip("'\"\n\t ")
 	manifest_file_path = os.path.join(WORK_DIR, package_name, "AndroidManifest.xml")
 	try:
@@ -184,7 +184,7 @@ try:
 	print("[I] Aligning APK")
 	subprocess.check_output(["zipalign", "-v", "-p", "4", new_apk_path, aligned_apk_path])
 
-	align_verify = subprocess.check_output(["zipalign", "-v", "-c", "4", aligned_apk_path])
+	align_verify = subprocess.check_output(["zipalign", "-v", "-c", "4", aligned_apk_path]).decode()
 	align_verify.strip(" \r\n\t")
 	if not "Verification succesful" in align_verify:
 		print("[E] alignment verification failed")
@@ -194,13 +194,13 @@ try:
 
 	# 
 	print("[I] Signing APK")
-	sign_status = subprocess.check_output(["apksigner", "sign", "--verbose", "--ks", "appmon.keystore", "--ks-pass", "pass:appmon", "--out", signed_apk_path, aligned_apk_path])
+	sign_status = subprocess.check_output(["apksigner", "sign", "--verbose", "--ks", "appmon.keystore", "--ks-pass", "pass:appmon", "--out", signed_apk_path, aligned_apk_path]).decode()
 	
 	if not "Signed" in sign_status:
 		print("[E] APK signing error %s" % (sign_status))
 
 	
-	sign_verify = subprocess.check_output(["apksigner", "verify", "--verbose", signed_apk_path])
+	sign_verify = subprocess.check_output(["apksigner", "verify", "--verbose", signed_apk_path]).decode()
 
 	if not "Verified using v1 scheme (JAR signing): true" in sign_verify and not "Verified using v2 scheme (APK Signature Scheme v2): true" in sign_verify:
 		print(sign_verify)
