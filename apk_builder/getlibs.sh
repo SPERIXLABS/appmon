@@ -1,5 +1,8 @@
 #!/bin/bash
 
+if [ -f lib.zip ]; then
+  rm -rf lib.zip
+fi
 mkdir lib
 cd lib
 wget -qO - https://api.github.com/repos/frida/frida/releases/latest | grep -o "\/frida\/frida\/releases\/download\/.*\/frida-gadget-.*-android-.*\.so\.xz" | sed 's/\/frida\/frida/https:\/\/github\.com\/frida\/frida/g' | sed 's/%0A/\n/g' >list.txt
