@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import traceback
+from xml.etree import ElementTree
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', action='store', dest='apk_path', default='', help='''(absolute) path to APK''')
@@ -108,7 +109,7 @@ try:
 
     new_apk_path = WORK_DIR + "/" + package_name + ".apk"
     subprocess.call(["cp", apk_path, new_apk_path])
-    subprocess.call(["apktool", "--quiet", "decode", new_apk_path])
+    subprocess.call(["apktool", "-q", "d", new_apk_path])
     subprocess.call(["mv", package_name, WORK_DIR])
 
     if not "uses-permission: name='android.permission.INTERNET'" in apk_permissions:
@@ -124,6 +125,35 @@ try:
                     manifest_file_contents = "".join(manifest_file_contents)
                     f.write(manifest_file_contents)
                 break
+
+    # extractNativeLibs, networkSecurityConfig
+    res_path = os.path.join(WORK_DIR + "/" + package_name, "res/xml")
+    res_path = os.path.abspath(res_path)
+    if not os.path.exists(res_path):
+        os.makedirs(res_path)
+    print("[I] Adding network file")
+
+    file = "network_security_config.xml"
+    with open(file, "r") as network_file:
+        with open(os.path.join(res_path, file), "w+") as new_network_file:
+            new_network_file.write(network_file.read())
+
+    if os.path.isfile(manifest_file_path):
+        ElementTree.register_namespace("android", "http://schemas.android.com/apk/res/android")
+
+        tree = ElementTree.parse(manifest_file_path)
+        if tree is not None:
+            root = tree.getroot()
+            if root is not None:
+                application = root.find("application")
+                application.set("{http://schemas.android.com/apk/res/android}networkSecurityConfig",
+                                "@xml/network_security_config")
+                application.set("{http://schemas.android.com/apk/res/android}extractNativeLibs",
+                                "true")
+
+                with open(manifest_file_path, "wb") as xml_file:
+                    xml_file.write('<?xml version="1.0" encoding="utf-8" standalone="no"?>'.encode())
+                    xml_file.write(ElementTree.tostring(root))
 
     print("[I] Searching .smali")
     with codecs.open(launchable_activity_path, 'r', 'utf-8') as f:
@@ -184,11 +214,11 @@ try:
     aligned_apk_path = "%s/%s-zipaligned.apk" % (os.path.join(WORK_DIR, package_name, "dist"), package_name)
     signed_apk_path = "%s/%s-zipaligned-signed.apk" % (os.path.join(WORK_DIR, package_name, "dist"), package_name)
     renamed_apk_path = "%s/%s.apk" % (
-    os.path.join(WORK_DIR, package_name, "dist"), os.path.basename(apk_path).split(".apk")[0] + "-appmon")
+        os.path.join(WORK_DIR, package_name, "dist"), os.path.basename(apk_path).split(".apk")[0] + "-appmon")
     appmon_apk_path = os.path.join(os.getcwd(), os.path.basename(apk_path).split(".apk")[0] + "-appmon.apk")
 
     print("[I] Aligning APK")
-    subprocess.check_output(["zipalign", "-v", "-p", "4", new_apk_path, aligned_apk_path])
+    subprocess.check_output(["zipalign", "-v", "-p", "-f", "4", new_apk_path, aligned_apk_path])
 
     align_verify = subprocess.check_output(["zipalign", "-v", "-c", "4", aligned_apk_path]).decode()
     align_verify.strip(" \r\n\t")

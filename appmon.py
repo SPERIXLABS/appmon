@@ -1,26 +1,35 @@
 #!/usr/bin/python
 
 ###
- # Copyright (c) 2016 Nishant Das Patnaik.
- #
- # Licensed under the Apache License, Version 2.0 (the "License");
- # you may not use this file except in compliance with the License.
- # You may obtain a copy of the License at
- #
- #  http://www.apache.org/licenses/LICENSE-2.0
- #
- # Unless required by applicable law or agreed to in writing, software
- # distributed under the License is distributed on an "AS IS" BASIS,
- # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- # See the License for the specific language governing permissions and
- # limitations under the License.
+# Copyright (c) 2016 Nishant Das Patnaik.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 ###
 
-import os, sys, argparse, time, codecs, binascii, frida, json, traceback, subprocess, tempfile
+import argparse
+import codecs
+import os
+import platform as platform_module
+import sys
+import tempfile
+import time
+import traceback
+
+import frida
 from flask import Flask, request, render_template
 from termcolor import colored
+
 import database as db
-import platform as platform_module
 
 print("""
      ___      .______   .______   .___  ___.   ______   .__   __.
@@ -34,12 +43,12 @@ print("""
 """)
 
 app = Flask(__name__, static_url_path='/static')
-#app.debug = True
+# app.debug = True
 
 device = ''
 session = ''
 temp_dir = tempfile.mkdtemp()
-merged_script_path = os.path.join(temp_dir,'merged.js')
+merged_script_path = os.path.join(temp_dir, 'merged.js')
 APP_LIST = []
 
 
@@ -64,7 +73,7 @@ def serve_json():
     else:
         db_name = request.args.get('app')
     response = db.read_from_database(db_name, index)
-    #response = open('static/data.json').read()
+    # response = open('static/data.json').read()
     return response
 
 
@@ -78,7 +87,7 @@ def monitor_page():
 def landing_page():
     global APP_LIST, DB_MAP
 
-    app_dumps_dir = os.path.join('.','app_dumps')
+    app_dumps_dir = os.path.join('.', 'app_dumps')
     for root, dirs, files in os.walk(app_dumps_dir):
         path = root.split(os.sep)
         for file in files:
@@ -92,25 +101,25 @@ def landing_page():
 def init_opts():
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', action='store', dest='app_name', default='',
-                    help='''Process Name;
+                        help='''Process Name;
                     Accepts "Twitter" for iOS;
                     "com.twitter.android" for Android; "Twitter" for macOS''')
     parser.add_argument('--spawn', action='store', dest='spawn', default=0,
-                    help='''Optional; Accepts 1=Spawn, 0=Attach; Needs "-p PLATFORM"''')
+                        help='''Optional; Accepts 1=Spawn, 0=Attach; Needs "-p PLATFORM"''')
     parser.add_argument('-p', action='store', dest='platform',
-                    help='Platform Type; Accepts "ios", "iossim", "android" or "macos"')
+                        help='Platform Type; Accepts "ios", "iossim", "android" or "macos"')
     parser.add_argument('-s', action='store', dest='script_path', default='',
-                    help='''Path to agent script file;
+                        help='''Path to agent script file;
                     Can be relative/absolute path for a file or directory;
                     Multiple scripts in a directory shall be merged;
                     Needs "-a APP_NAME"''')
     parser.add_argument('-o', action='store', dest='output_dir',
-                    help='''(Optional) Path to store any dumps/logs;
+                        help='''(Optional) Path to store any dumps/logs;
                     Accepts relative/absolute paths''')
     parser.add_argument('-r', action='store', dest='report',
                         help='Report database name (Default is <appname>.db')
     parser.add_argument('-ls', action='store', dest='list_apps', default=0,
-                    help='''Optional; Accepts 1 or 0; Lists running Apps on target device; Needs "-p PLATFORM"''')
+                        help='''Optional; Accepts 1 or 0; Lists running Apps on target device; Needs "-p PLATFORM"''')
     parser.add_argument('-v', action='version', version='AppMon Sniffer v0.1, Nishant Das Patnaik, 2016')
 
     if len(sys.argv) == 1:
@@ -119,7 +128,6 @@ def init_opts():
 
     global output_dir, report_name
 
-
     results = parser.parse_args()
     app_name = results.app_name
     platform = results.platform
@@ -127,11 +135,9 @@ def init_opts():
     list_apps = int(results.list_apps)
     spawn = int(results.spawn)
 
-    output_dir = results.output_dir if results.output_dir else os.path.join('.','app_dumps')
+    output_dir = results.output_dir if results.output_dir else os.path.join('.', 'app_dumps')
 
     report_name = results.report if results.report else app_name
-
-
 
     if script_path is not None and app_name == '' and list_apps == 0:
         parser.print_help()
@@ -194,8 +200,8 @@ def on_message(message, data):
     if message['type'] == 'send':
         writePath = os.path.join(output_dir, str(report_name) + '.db')
         db.save_to_database(writePath, message['payload'])
-        #writePath = os.path.join(output_dir, app_name + '.json')
-        #writeBinFile(writePath, message['payload']) #writeBinFile(writePath, binascii.unhexlify(message['payload']))
+        # writePath = os.path.join(output_dir, app_name + '.json')
+        # writeBinFile(writePath, message['payload']) #writeBinFile(writePath, binascii.unhexlify(message['payload']))
         print((colored('[%s] Dumped to %s' % (current_time, writePath), 'green')))
     elif message['type'] == 'error':
         print((message['stack']))
@@ -256,8 +262,8 @@ rpc.exports = {
 """
             script = session.create_script(str_script)
             script.load()
-            if script.exports.gadgetdisplayname:
-                app_name = script.exports.gadgetdisplayname()
+            if script.exports_sync.gadgetdisplayname:
+                app_name = script.exports_sync.gadgetdisplayname()
             script.unload()
             return app_name
     except Exception as e:
@@ -281,9 +287,9 @@ rpc.exports = {
 """)
         script.load()
         if platform == 'ios':
-            bundleID = script.exports.iosbundleid()
+            bundleID = script.exports_sync.iosbundleid()
         elif platform == 'macos':
-            bundleID = script.exports.macosbundleid()
+            bundleID = script.exports_sync.macosbundleid()
         script.unload()
         session.detach()
         return bundleID
@@ -291,12 +297,13 @@ rpc.exports = {
         print((colored("[ERROR] " + str(e), "red")))
         traceback.print_exc()
 
+
 def init_session():
     try:
         session = None
         if platform == 'ios' or platform == 'android':
             try:
-                device = frida.get_usb_device(3) # added timeout to wait for 3 seconds
+                device = frida.get_usb_device(3)  # added timeout to wait for 3 seconds
             except Exception as e:
                 print((colored(str(e), "red")))
                 traceback.print_exc()
@@ -309,15 +316,19 @@ def init_session():
                 elif platform == "ios":
                     print((colored("Troubleshooting Help", "blue")))
                     print((colored("HINT: Have you installed `frida` module from Cydia?", "blue")))
-                    print((colored("HINT: Have used `ipa_installer` to inject the `FridaGadget` shared lbrary?", "blue")))
+                    print(
+                        (colored("HINT: Have used `ipa_installer` to inject the `FridaGadget` shared lbrary?", "blue")))
                     sys.exit(1)
         elif platform == 'iossim':
             try:
                 device = frida.get_remote_device()
             except Exception as e:
                 print((colored("Troubleshooting Help", "blue")))
-                print((colored("HINT: Have you successfully integrated the FridaGadget dylib with the XCode Project?", "blue")))
-                print((colored("HINT: Do you see a message similar to \"[Frida INFO] Listening on 127.0.0.1 TCP port 27042\" on XCode console logs?", "blue")))
+                print((colored("HINT: Have you successfully integrated the FridaGadget dylib with the XCode Project?",
+                               "blue")))
+                print((colored(
+                    "HINT: Do you see a message similar to \"[Frida INFO] Listening on 127.0.0.1 TCP port 27042\" on XCode console logs?",
+                    "blue")))
                 sys.exit(1)
         elif platform == 'macos':
             device = frida.get_local_device()
@@ -330,15 +341,15 @@ def init_session():
                 if platform == 'android' and spawn == 1:
                     print((colored("Now Spawning %s" % app_name, "green")))
                     pid = device.spawn([app_name])
-                    #time.sleep(5)
+                    # time.sleep(5)
                     session = device.attach(pid)
-                    #time.sleep(5)
+                    # time.sleep(5)
                 elif (platform == 'ios' or platform == 'macos') and spawn == 1:
                     bundleID = getBundleID(device, app_name, platform)
                     if bundleID:
                         print((colored("Now Spawning %s" % bundleID, "green")))
                         pid = device.spawn([bundleID])
-                        #time.sleep(5)
+                        # time.sleep(5)
                         session = device.attach(pid)
                     else:
                         print((colored("[ERROR] Can't spawn %s" % app_name, "red")))
@@ -362,6 +373,7 @@ def init_session():
         sys.exit(1)
     return device, session, pid
 
+
 try:
     app_name, platform, script_path, list_apps, output_dir, spawn = init_opts()
     device, session, pid = init_session()
@@ -380,7 +392,7 @@ try:
             script.load()
             if spawn == 1 and pid:
                 device.resume(pid)
-            app.run() #Start WebServer
+            app.run()  # Start WebServer
 except Exception as e:
     print((colored('[ERROR] ' + str(e), 'red')))
     traceback.print_exc()
