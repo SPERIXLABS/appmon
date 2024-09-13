@@ -75,3 +75,4 @@ dmypy.json
 
 # extras
 /app_dumps
+/apk_builder/.git

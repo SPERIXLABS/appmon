@@ -1,22 +1,28 @@
 #!/usr/bin/python
 
 ###
- # Copyright (c) 2016 Nishant Das Patnaik.
- #
- # Licensed under the Apache License, Version 2.0 (the "License");
- # you may not use this file except in compliance with the License.
- # You may obtain a copy of the License at
- #
- #  http://www.apache.org/licenses/LICENSE-2.0
- #
- # Unless required by applicable law or agreed to in writing, software
- # distributed under the License is distributed on an "AS IS" BASIS,
- # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- # See the License for the specific language governing permissions and
- # limitations under the License.
+# Copyright (c) 2016 Nishant Das Patnaik.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 ###
 
-import os, sys, frida, re, argparse, codecs, json
+import argparse
+import codecs
+import frida
+import json
+import os
+import sys
+
 from termcolor import colored
 
 print("""
@@ -32,16 +38,17 @@ print("""
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-a", action="store", dest="app_name", default="",
-                                        help='''Process Name;
+                    help='''Process Name;
                                         Accepts "com.twitter.android"''')
 parser.add_argument("-c", action="store", dest="class_name", default="",
-                                        help='''Class Name;
+                    help='''Class Name;
                                         Example: "OpenSSL*SHA*"''')
 parser.add_argument("-m", action="store", dest="method_name", default="",
-                                        help='''Method Name;
+                    help='''Method Name;
                                         Example: "*digest*";''')
 
-parser.add_argument("-v", action="version", version="AppMon Android Method Tracer v0.2, Copyright 2016 Nishant Das Patnaik")
+parser.add_argument("-v", action="version",
+                    version="AppMon Android Method Tracer v0.2, Copyright 2016 Nishant Das Patnaik")
 
 if len(sys.argv) < 2:
     parser.print_help()
@@ -57,18 +64,26 @@ if len(className) >= 1 and len(className) < 3:
     print(colored("[ERROR] Class Name should be at least 3 characters", "red"))
     sys.exit(1)
 
+
 def on_message(message, data):
     if message["type"] == "send":
         payload = json.loads(message["payload"])
         if payload["type"] == "classEnum":
             if "overloads" in payload and "className" in payload and "methodName" in payload and "argCount" in payload:
-              classCandidates.append([ payload["className"], payload["overloads"], payload["methodName"], payload["argCount"] ])
-              print('[FOUND] "%s" in "%s"' % (colored(payload['methodName'], "yellow", attrs=["bold"]), colored(payload['className'], "magenta", attrs=["bold"])))
+                classCandidates.append(
+                    [payload["className"], payload["overloads"], payload["methodName"], payload["argCount"]])
+                print('[FOUND] "%s" in "%s"' % (colored(payload['methodName'], "yellow", attrs=["bold"]),
+                                                colored(payload['className'], "magenta", attrs=["bold"])))
             elif "className" in payload and not "overloads" in payload and not "methodName" in payload:
-              print('[FOUND] "%s"' % colored(payload['className'], "magenta", attrs=["bold"]))
+                print('[FOUND] "%s"' % colored(payload['className'], "magenta", attrs=["bold"]))
         elif payload['type'] == "methodTrace":
             payload['overloadIndex']
-            print("%(methodName)s \n\tCalled by: %(caller)s \n\tDefined at: %(className)s [%(overloadIndex)s]\n" % { "methodName": colored(payload['methodName'], "green", attrs=["bold"]), "caller": colored(payload['caller'].split("class ")[1], "blue", attrs=["bold"]), "className": colored(payload['className'], "magenta", attrs=["bold"]), "overloadIndex": colored(payload['overloadIndex'], "red", attrs=["bold"]) })
+            print("%(methodName)s \n\tCalled by: %(caller)s \n\tDefined at: %(className)s [%(overloadIndex)s]\n" % {
+                "methodName": colored(payload['methodName'], "green", attrs=["bold"]),
+                "caller": colored(payload['caller'].split("class ")[1], "blue", attrs=["bold"]),
+                "className": colored(payload['className'], "magenta", attrs=["bold"]),
+                "overloadIndex": colored(payload['overloadIndex'], "red", attrs=["bold"])})
+
 
 def build_search_script(className, method):
     if className and className != "" and not method or method == "":
@@ -97,7 +112,7 @@ def build_search_script(className, method):
               }
             }
         });
-        """ % { "className": className }
+        """ % {"className": className}
     else:
         script = """Java.perform(function() {
   function wildcard_search(string, search) {
@@ -152,8 +167,9 @@ def build_search_script(className, method):
     onComplete: function() {}
   });
 });
-        """ % { "className": className, "methodName": method }
+        """ % {"className": className, "methodName": method}
     return script
+
 
 def begin_instrumentation(appName, script_source):
     device = frida.get_usb_device()
@@ -170,9 +186,10 @@ def begin_instrumentation(appName, script_source):
         print(colored('[ERROR]: ' + str(e), "red"))
         sys.exit()
 
+
 def enumerate_overloads(overloadIndx, currentClassName, overload_count, methodName):
     generated_overloads = []
-    template ="""
+    template = """
     var class_%(overloadIndx)s = "%(currentClassName)s";
     var c_%(overloadIndx)s = Java.use(class_%(overloadIndx)s);
     c_%(overloadIndx)s.%(methodName)s.overloads[i].implementation = function(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15) {
@@ -196,26 +213,27 @@ def enumerate_overloads(overloadIndx, currentClassName, overload_count, methodNa
     };
     send(JSON.stringify(payload));
     return this.%(methodName)s.overloads[i].apply(this, arguments);
-  };""" % { "overloadIndx": overloadIndx, "currentClassName": currentClassName, "methodName": methodName }
+  };""" % {"overloadIndx": overloadIndx, "currentClassName": currentClassName, "methodName": methodName}
     for index in range(0, overload_count):
         argString = ""
         current_template = ""
         current_overload = ""
         current_template = template
-        current_template = current_template.replace("overloads[i]", "overloads[" + str(index) +"]")
+        current_template = current_template.replace("overloads[i]", "overloads[" + str(index) + "]")
         current_template = current_template.replace("ovrldindexplaceholder", str(index))
         generated_overloads.append(current_template)
     return generated_overloads
+
 
 def build_trace_script(candidates, methodName):
     all_overloads = ""
     generated_trace_scripts = []
     for candidate in candidates:
-      overloadIndx = str(candidates.index(candidate))
-      for overload_variant in enumerate_overloads(overloadIndx, candidate[0], candidate[1], candidate[2]):
-        if overload_variant == "":
-          continue
-        all_overloads += overload_variant
+        overloadIndx = str(candidates.index(candidate))
+        for overload_variant in enumerate_overloads(overloadIndx, candidate[0], candidate[1], candidate[2]):
+            if overload_variant == "":
+                continue
+            all_overloads += overload_variant
 
     tracer_template = """'use strict';
             var checkType = function(arg) {
@@ -294,6 +312,7 @@ Java.perform(function () {
     generated_trace_scripts.append(tracer_template)
     return generated_trace_scripts
 
+
 def generate_tracer_js(scriptName, txtScript):
     script_dir = "__handlers__"
     if not os.path.exists(script_dir):
@@ -303,8 +322,9 @@ def generate_tracer_js(scriptName, txtScript):
         f.write(txtScript)
     return tracer_file_path
 
+
 if not method or method == "" and not className or className == "":
-    print(colored('Enumerating loaded classes...', "green", attrs=["bold"]))    
+    print(colored('Enumerating loaded classes...', "green", attrs=["bold"]))
 else:
     print('Searching method "%s" in loaded classes...' % colored(method, "green", attrs=["bold"]))
 
