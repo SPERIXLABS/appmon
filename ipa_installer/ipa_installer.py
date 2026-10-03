@@ -1,22 +1,32 @@
 #!/usr/bin/python
 
 ###
- # Copyright (c) 2016 Nishant Das Patnaik.
- #
- # Licensed under the Apache License, Version 2.0 (the "License");
- # you may not use this file except in compliance with the License.
- # You may obtain a copy of the License at
- #
- #  http://www.apache.org/licenses/LICENSE-2.0
- #
- # Unless required by applicable law or agreed to in writing, software
- # distributed under the License is distributed on an "AS IS" BASIS,
- # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- # See the License for the specific language governing permissions and
- # limitations under the License.
+# Copyright (c) 2016 Nishant Das Patnaik.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 ###
 
-import os, sys, re, argparse, codecs, subprocess, pwd, glob, shutil, time, zipfile, traceback, plistlib
+import argparse
+import codecs
+import os
+import plistlib
+import pwd
+import shutil
+import subprocess
+import sys
+import time
+import traceback
+
 from termcolor import colored
 
 print("""
@@ -32,13 +42,13 @@ print("""
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-ipa', action='store', dest='ipa_path', default='',
-                                        help='''(Absolute) Path to IPA''')
+                    help='''(Absolute) Path to IPA''')
 parser.add_argument('-mobileprovision', action='store', dest='mobileprovision_path', default='',
-                                        help='''(Absolute) Path to embedded.mobileprovision (OPTIONAL)''')
+                    help='''(Absolute) Path to embedded.mobileprovision (OPTIONAL)''')
 parser.add_argument('-identity', action='store', dest='dev_identity', default='',
-                                        help='''Developer Identity Hash (OPTIONAL)''')
+                    help='''Developer Identity Hash (OPTIONAL)''')
 parser.add_argument('-uuid', action='store', dest='uuid', default='',
-                                        help='''Device UUID (OPTIONAL)''')
+                    help='''Device UUID (OPTIONAL)''')
 parser.add_argument('-v', action='version', version='AppMon IPA Installer v0.1, Copyright 2016 Nishant Das Patnaik')
 
 if len(sys.argv) < 2:
@@ -48,9 +58,11 @@ if len(sys.argv) < 2:
 if not os.path.isdir(os.path.join(os.getcwd(), "apps")):
     os.makedirs(os.path.join(os.getcwd(), "apps"))
 
+
 def deviceError():
     print("%s" % colored("Error: Is the device connected over USB?", "red", attrs=["bold"]))
     sys.exit(255)
+
 
 def getDeveloperId():
     for id in subprocess.check_output(["node", "node-applesign/bin/ipa-resign.js", "-L"]).split("\n"):
@@ -61,9 +73,11 @@ def getDeveloperId():
             devID = input("Enter \"iPhone Developer\" Identity Hash: ")
             return devID
 
+
 def getMobileProvisionFile():
     PATH = "/Users/%s/Library/Developer/Xcode/DerivedData" % pwd.getpwuid(os.getuid())[0]
-    mobileprovision_path = [os.path.join(dp, f) for dp, dn, filenames in os.walk(PATH) for f in filenames if os.path.splitext(f)[1] == '.mobileprovision']
+    mobileprovision_path = [os.path.join(dp, f) for dp, dn, filenames in os.walk(PATH) for f in filenames if
+                            os.path.splitext(f)[1] == '.mobileprovision']
     if len(mobileprovision_path) == 1:
         mobileprovision_path = mobileprovision_path[0]
         if not os.path.isfile(mobileprovision_path):
@@ -78,7 +92,7 @@ def getMobileProvisionFile():
     else:
         mobileprovision_path = input('Provide the absolute path to "embedded.mobileprovision" file: ')
         return mobileprovision_path
-    
+
 
 def getMachOExecutable(app_path):
     try:
@@ -98,7 +112,8 @@ def getMachOExecutable(app_path):
                         break
             return os.path.join(app_path, output)
         except Exception as __error:
-            print(traceback.print_exc()) 
+            print(traceback.print_exc())
+
 
 def getDeviceUUID():
     try:
@@ -106,16 +121,18 @@ def getDeviceUUID():
         uuid = subprocess.check_output(["sudo", "ideviceinfo", "-s"]).split("UniqueDeviceID: ")[1].split("\n")[0]
         device_conn = subprocess.check_output(["sudo", "ios-deploy", "-i", uuid, "--no-wifi", "-c"])
         if "Found %s (" % (uuid) in device_conn:
-            print("[+] Found %s connected through USB." % colored(device_conn.split("Found")[1].strip().split(" connected through USB.")[0], "green", attrs=["bold"]))
+            print("[+] Found %s connected through USB." % colored(
+                device_conn.split("Found")[1].strip().split(" connected through USB.")[0], "green", attrs=["bold"]))
             time.sleep(1)
         else:
             print(uuid, device_conn)
             deviceError()
     except Exception as e:
-            print(str(e))
-            deviceError()
+        print(str(e))
+        deviceError()
 
     return uuid
+
 
 results = parser.parse_args()
 ipa_path = results.ipa_path
@@ -168,14 +185,15 @@ if os.listdir(payload_path)[0].endswith(".app"):
     app_path = os.path.join(payload_path, app_name)
     _CodeSignature_path = os.path.join(app_path, "_CodeSignature/")
     executable_filepath = getMachOExecutable(app_path)
-    #print executable_filepath
+    # print executable_filepath
     injected_dylib_path = os.path.join(app_path, "FridaGadget.dylib")
 
 subprocess.check_output(["rm", "-rf", _CodeSignature_path])
 subprocess.check_output(["chmod", "755", "FridaGadget.dylib"])
 subprocess.check_output(["cp", gadget_path, app_path])
 print("[+] Injecting DYLIB...")
-subprocess.check_output([optool_path, "install", "-c", "load", "-p", "@executable_path/FridaGadget.dylib", "-t", executable_filepath])
+subprocess.check_output(
+    [optool_path, "install", "-c", "load", "-p", "@executable_path/FridaGadget.dylib", "-t", executable_filepath])
 print("[+] Code-signing...")
 subprocess.check_output(["codesign", "-fs", 'iPhone Developer', injected_dylib_path])
 subprocess.check_output(["codesign", "-fs", 'iPhone Developer', app_path])
@@ -183,24 +201,28 @@ subprocess.check_output(["find", unzip_filepath, "-name", '".DS_Store"', "-type"
 shutil.make_archive(injected_zip_filepath.strip(".zip"), 'zip', unzip_filepath)
 os.rename(injected_zip_filepath, injected_ipa_filepath)
 shutil.copy(injected_ipa_filepath, os.getcwd())
-subprocess.check_output(["node", iparesign_path, "--without-watchapp", "--identity", dev_identity, "--mobileprovision", mobileprovision_path, injected_ipa_filename])
+subprocess.check_output(["node", iparesign_path, "--without-watchapp", "--identity", dev_identity, "--mobileprovision",
+                         mobileprovision_path, injected_ipa_filename])
 shutil.copy(os.path.join(os.getcwd(), resigned_ipa_name), os.path.join(os.getcwd(), "%s.zip" % resign_name))
 subprocess.check_output(["unzip", os.path.join(os.getcwd(), resigned_ipa_name), "-d", extracted_resigned_path])
 subprocess.check_output(["rm", "-rf", work_dir])
 subprocess.check_output(["rm", "-rf", os.path.join(os.getcwd(), "%s.zip" % resign_name)])
 subprocess.check_output(["rm", "-rf", os.path.join(os.getcwd(), injected_ipa_filename)])
 subprocess.check_output(["mv", "./%s" % resigned_ipa_name, "apps/"])
-#subprocess.call(["sudo", "ideviceinstaller", "-u", uuid, "-i", "%s/Payload/%s" % (extracted_resigned_path, app_name)])
+# subprocess.call(["sudo", "ideviceinstaller", "-u", uuid, "-i", "%s/Payload/%s" % (extracted_resigned_path, app_name)])
 print("[+] Installing IPA...")
-subprocess.check_output(["sudo", "ios-deploy", "-v", "--no-wifi", "-i", uuid, "-b", "%s/Payload/%s" % (extracted_resigned_path, app_name)])
-#print(chr(27) + "[2J")
+subprocess.check_output(
+    ["sudo", "ios-deploy", "-v", "--no-wifi", "-i", uuid, "-b", "%s/Payload/%s" % (extracted_resigned_path, app_name)])
+# print(chr(27) + "[2J")
 time.sleep(2)
 print("%s" % colored("----------------HELP----------------", "green", attrs=["bold"]))
 print('[+] Wait for "%s", on the debugger console to initialize' % colored("60 seconds", "red", attrs=["bold"]))
 time.sleep(1)
-print('[+] Keep the debugger running to continue using the app. To quit type "%s", in the debugger console.' % colored("quit", attrs=["bold"]))
+print('[+] Keep the debugger running to continue using the app. To quit type "%s", in the debugger console.' % colored(
+    "quit", attrs=["bold"]))
 time.sleep(2)
-print('[+] The app will remain suspended until you run, (in a different terminal window/tab), \n%s' % colored("frida -U Gadget", "red", attrs=["bold"]))
+print('[+] The app will remain suspended until you run, (in a different terminal window/tab), \n%s' % colored(
+    "frida -U Gadget", "red", attrs=["bold"]))
 time.sleep(2)
 print("[+] Generating launch script...")
 message = """#!/bin/sh
@@ -220,5 +242,6 @@ print("%s" % colored("------------------------------------", "green", attrs=["bo
 time.sleep(2)
 print(colored("[+] Starting app..."))
 time.sleep(2)
-subprocess.call(["sudo", "ios-deploy", "-v", "--no-wifi", "-i", uuid, "--noinstall", "-b", "%s/Payload/%s" % (extracted_resigned_path, app_name)])
+subprocess.call(["sudo", "ios-deploy", "-v", "--no-wifi", "-i", uuid, "--noinstall", "-b",
+                 "%s/Payload/%s" % (extracted_resigned_path, app_name)])
 sys.exit(0)

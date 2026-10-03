@@ -116,6 +116,12 @@ def init_opts():
     parser.add_argument('-o', action='store', dest='output_dir',
                         help='''(Optional) Path to store any dumps/logs;
                     Accepts relative/absolute paths''')
+    parser.add_argument('-d', action='store', dest='device_hint', default='',
+                        help='''(Optional) Device id or name substring to pick the USB target;
+                    e.g. "-d emulator-5556" or "-d R5CY93J9L7B".
+                    Required when several phones/emulators are attached:
+                    without it Frida grabs the FIRST USB device, which may be
+                    an iPhone''')
     parser.add_argument('-r', action='store', dest='report',
                         help='Report database name (Default is <appname>.db')
     parser.add_argument('-ls', action='store', dest='list_apps', default=0,
@@ -134,6 +140,7 @@ def init_opts():
     script_path = results.script_path
     list_apps = int(results.list_apps)
     spawn = int(results.spawn)
+    device_hint = results.device_hint
 
     output_dir = results.output_dir if results.output_dir else os.path.join('.', 'app_dumps')
 
@@ -143,7 +150,7 @@ def init_opts():
         parser.print_help()
         sys.exit(1)
 
-    return app_name, platform, script_path, list_apps, output_dir, spawn
+    return app_name, platform, script_path, list_apps, output_dir, spawn, device_hint
 
 
 def merge_scripts(path):
@@ -178,13 +185,37 @@ def writeBinFile(fname, data):
 
 
 def list_processes(session):
-    print(('PID\tProcesses\n', '===\t========='))
+    print('PID\tProcesses')
+    print('===\t=========')
     for app in session.enumerate_processes():
         print(("%s\t%s" % (app.pid, app.name)))
 
 
-def on_detached():
-    print((colored('[WARNING] "%s" has terminated!' % (app_name), 'red')))
+def on_detached(reason, crash):
+    # frida>=16 invokes the detached handler as (reason, crash); the old
+    # zero-arg signature raised TypeError right when the target exited
+    print((colored('[WARNING] "%s" has terminated! (%s)' % (app_name, reason), 'red')))
+
+
+def get_usb_device(hint=''):
+    # frida.get_usb_device() returns the FIRST USB device; benches with an
+    # iPhone and an Android attached (both show up as type 'usb') silently
+    # target the wrong one and fail later with a baffling ProtocolError.
+    # Match on id/name substring instead when the user asks for a target.
+    devices = [d for d in frida.enumerate_devices() if d.type == 'usb']
+    if hint:
+        matches = [d for d in devices if hint in d.id or hint in d.name]
+        if not matches:
+            print((colored('[ERROR] No USB device matching "%s". Attached:' % hint, 'red')))
+            for d in devices:
+                print(('  - %s (%s)' % (d.id, d.name)))
+            sys.exit(1)
+        return matches[0]
+    if len(devices) > 1:
+        print((colored('[WARNING] Multiple USB devices attached, using the first; pick one with -d:', 'yellow')))
+        for d in devices:
+            print(('  - %s (%s)' % (d.id, d.name)))
+    return frida.get_usb_device(3)
 
 
 def on_message(message, data):
@@ -242,8 +273,8 @@ rpc.exports = {
 """
             script = session.create_script(str_script)
             script.load()
-            if script.exports.gadgetdisplayname:
-                app_name = script.exports.gadgetdisplayname()
+            if script.exports_sync.gadgetdisplayname:
+                app_name = script.exports_sync.gadgetdisplayname()
             script.unload()
             return app_name
         elif platform == "android":
@@ -303,7 +334,7 @@ def init_session():
         session = None
         if platform == 'ios' or platform == 'android':
             try:
-                device = frida.get_usb_device(3)  # added timeout to wait for 3 seconds
+                device = get_usb_device(device_hint)
             except Exception as e:
                 print((colored(str(e), "red")))
                 traceback.print_exc()
@@ -375,7 +406,7 @@ def init_session():
 
 
 try:
-    app_name, platform, script_path, list_apps, output_dir, spawn = init_opts()
+    app_name, platform, script_path, list_apps, output_dir, spawn, device_hint = init_opts()
     device, session, pid = init_session()
 
     if int(list_apps) == 1:
